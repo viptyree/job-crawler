@@ -241,7 +241,10 @@ const removeRule = async (id) => {
 const runRule = async (row) => {
   try {
     await createTask({ rule_id: row.id })
-    ElMessage.success(`任务已创建，规则 "${row.name}" 开始执行`)
+    ElMessage.success({
+      message: `任务已创建，规则 "${row.name}" 开始执行，请到任务管理页面查看进度`,
+      duration: 5000
+    })
   } catch (e) {
     console.error(e)
   }

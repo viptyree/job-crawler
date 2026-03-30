@@ -49,7 +49,6 @@ async def list_tasks(
 @router.post("", response_model=TaskResponse)
 async def create_task(
     data: TaskCreate,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     """手动触发爬取任务"""
@@ -59,20 +58,21 @@ async def create_task(
     if not rule:
         raise HTTPException(status_code=404, detail="规则不存在")
 
-    # 创建任务记录
+    # 创建任务记录并立即开始执行
     task = Task(
         rule_id=data.rule_id,
-        status="pending",
+        status="running",  # 直接设置为运行中
         started_at=datetime.now(),
     )
     db.add(task)
-    await db.flush()
+    await db.commit()  # 提交事务到数据库
     await db.refresh(task)
 
     task_id = task.id
 
-    # 后台执行爬虫任务
-    background_tasks.add_task(run_crawler_task, task_id, data.rule_id)
+    # 立即执行爬虫任务（异步但不等待）
+    import asyncio
+    asyncio.create_task(run_crawler_task(task_id, data.rule_id))
 
     return TaskResponse(
         id=task.id, rule_id=task.rule_id, status=task.status,
@@ -109,7 +109,9 @@ async def get_task_logs(task_id: int, db: AsyncSession = Depends(get_db)):
 async def run_crawler_task(task_id: int, rule_id: int):
     """后台执行爬虫任务"""
     from app.crawler.engine import CrawlerEngine
+    import logging
 
+    logger = logging.getLogger("crawler.task")
     running_tasks[task_id] = True
 
     async with async_session() as db:
@@ -120,6 +122,7 @@ async def run_crawler_task(task_id: int, rule_id: int):
             task.status = "running"
             task.started_at = datetime.now()
             await db.commit()
+            logger.info(f"任务 {task_id} 开始执行")
 
             # 获取规则
             result = await db.execute(select(CrawlerRule).where(CrawlerRule.id == rule_id))
@@ -137,20 +140,30 @@ async def run_crawler_task(task_id: int, rule_id: int):
             # 更新任务结果
             result = await db.execute(select(Task).where(Task.id == task_id))
             task = result.scalar_one()
-            task.status = "success"
+            
+            if stats.get("success", 0) > 0:
+                task.status = "success"
+            elif stats.get("total", 0) > 0 and stats.get("errors", 0) > 0:
+                task.status = "failed"
+            else:
+                task.status = "failed"
+                task.error_msg = "爬虫未获取到数据，可能是反爬机制或网站结构变化"
+            
             task.finished_at = datetime.now()
             task.total_count = stats.get("total", 0)
             task.success_count = stats.get("success", 0)
             task.error_count = stats.get("errors", 0)
             task.log_text = stats.get("log", "")
             await db.commit()
+            logger.info(f"任务 {task_id} 执行完成: {task.status}")
 
         except Exception as e:
+            logger.error(f"任务 {task_id} 执行异常: {e}")
             result = await db.execute(select(Task).where(Task.id == task_id))
             task = result.scalar_one()
             task.status = "failed"
             task.finished_at = datetime.now()
-            task.error_msg = str(e)
+            task.error_msg = f"执行异常: {str(e)}"
             await db.commit()
         finally:
             running_tasks.pop(task_id, None)
