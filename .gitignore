@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+.env
+.venv
+venv/
+env/
+
+# SQLite 数据库（本地数据，不上传）
+backend/data/*.db
+backend/data/*.db-journal
+
+# uvicorn log
+nohup.out
+
+# Node.js
+node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+logs/
+
+# Seed data script output
+*.csv
+*.xlsx
