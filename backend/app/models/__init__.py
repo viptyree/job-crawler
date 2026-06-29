@@ -4,5 +4,25 @@ from app.models.task import Task
 from app.models.job import Job
 from app.models.company import Company
 from app.models.trend import Trend
+from app.company_intel.models import (
+    IntelCompany,
+    IntelCompanyAlias,
+    IntelJob,
+    IntelPlatformAccount,
+    IntelQuery,
+    IntelScore,
+)
 
-__all__ = ["CrawlerRule", "Task", "Job", "Company", "Trend"]
+__all__ = [
+    "CrawlerRule",
+    "Task",
+    "Job",
+    "Company",
+    "Trend",
+    "IntelCompany",
+    "IntelCompanyAlias",
+    "IntelJob",
+    "IntelPlatformAccount",
+    "IntelQuery",
+    "IntelScore",
+]

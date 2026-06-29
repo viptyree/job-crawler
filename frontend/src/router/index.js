@@ -37,6 +37,50 @@ const routes = [
     component: () => import('../views/Settings.vue'),
     meta: { title: '系统设置', icon: 'Tools' },
   },
+  {
+    path: '/company-intel',
+    name: 'CompanyIntel',
+    redirect: '/company-intel/search',
+    meta: { title: '企业招聘情报', icon: 'OfficeBuilding' },
+    children: [
+      {
+        path: '/company-intel/search',
+        name: 'CompanyIntelSearch',
+        component: () => import('../views/company-intel/CompanySearch.vue'),
+        meta: { title: '公司查询', icon: 'Search' },
+      },
+      {
+        path: '/company-intel/companies',
+        name: 'CompanyIntelCompanies',
+        component: () => import('../views/company-intel/CompanyList.vue'),
+        meta: { title: '公司档案', icon: 'OfficeBuilding' },
+      },
+      {
+        path: '/company-intel/companies/:id',
+        name: 'CompanyIntelCompanyProfile',
+        component: () => import('../views/company-intel/CompanyProfile.vue'),
+        meta: { title: '公司详情', hidden: true },
+      },
+      {
+        path: '/company-intel/tasks',
+        name: 'CompanyIntelTasks',
+        component: () => import('../views/company-intel/CompanyQueryTasks.vue'),
+        meta: { title: '查询任务', icon: 'Tickets' },
+      },
+      {
+        path: '/company-intel/reports/:queryId',
+        name: 'CompanyIntelReport',
+        component: () => import('../views/company-intel/CompanyReport.vue'),
+        meta: { title: '招聘报告', icon: 'Document' },
+      },
+      {
+        path: '/company-intel/platform-accounts',
+        name: 'CompanyIntelPlatformAccounts',
+        component: () => import('../views/company-intel/PlatformAccounts.vue'),
+        meta: { title: '平台账号', icon: 'User' },
+      },
+    ],
+  },
 ]
 
 const router = createRouter({

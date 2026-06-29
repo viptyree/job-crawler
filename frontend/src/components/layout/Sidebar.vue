@@ -12,10 +12,22 @@
       active-text-color="#409EFF"
       router
     >
-      <el-menu-item v-for="route in menuRoutes" :key="route.path" :index="route.path">
-        <el-icon><component :is="route.meta.icon" /></el-icon>
-        <span>{{ route.meta.title }}</span>
-      </el-menu-item>
+      <template v-for="route in menuRoutes" :key="route.path">
+        <el-sub-menu v-if="visibleChildren(route).length" :index="route.path">
+          <template #title>
+            <el-icon><component :is="route.meta.icon" /></el-icon>
+            <span>{{ route.meta.title }}</span>
+          </template>
+          <el-menu-item v-for="child in visibleChildren(route)" :key="child.path" :index="child.path">
+            <el-icon><component :is="child.meta.icon" /></el-icon>
+            <span>{{ child.meta.title }}</span>
+          </el-menu-item>
+        </el-sub-menu>
+        <el-menu-item v-else :index="route.path">
+          <el-icon><component :is="route.meta.icon" /></el-icon>
+          <span>{{ route.meta.title }}</span>
+        </el-menu-item>
+      </template>
     </el-menu>
     <div class="sidebar-footer">
       <div class="version">v1.0.0</div>
@@ -31,6 +43,7 @@ import { routes } from '@/router/index.js'
 const route = useRoute()
 const currentRoute = computed(() => route.path)
 const menuRoutes = routes.filter(r => r.meta?.title)
+const visibleChildren = (route) => (route.children || []).filter(child => child.meta?.title && !child.meta?.hidden)
 </script>
 
 <style scoped>
