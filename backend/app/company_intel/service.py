@@ -1,4 +1,5 @@
 """Company intelligence application service."""
+import asyncio
 import json
 from datetime import datetime
 from sqlalchemy import desc, select
@@ -56,7 +57,10 @@ async def run_company_search(
         adapters = get_real_adapters(platforms) if use_real else get_adapters(platforms)
         for adapter in adapters:
             try:
-                results = await adapter.search(company_name=company_name, aliases=aliases, city=city, keyword=keyword)
+                results = await asyncio.wait_for(
+                    adapter.search(company_name=company_name, aliases=aliases, city=city, keyword=keyword),
+                    timeout=90,
+                )
             except ManualActionRequired as exc:
                 platform_messages.append(f"{adapter.platform}: {exc}")
                 if search_mode == "real_with_mock_fallback":
@@ -64,6 +68,9 @@ async def run_company_search(
                     results = await mock_adapter.search(company_name=company_name, aliases=aliases, city=city, keyword=keyword)
                 else:
                     results = []
+            except TimeoutError:
+                platform_messages.append(f"{adapter.platform}: 查询超时，请打开登录窗口确认平台状态后重试。")
+                results = []
             for item in results:
                 job = IntelJob(
                     query_id=query.id,
@@ -80,7 +87,10 @@ async def run_company_search(
                 )
                 db.add(job)
                 saved_jobs.append(job)
-        query.status = "success"
+        if search_mode == "real" and platform_messages and not saved_jobs:
+            query.status = "manual_required"
+        else:
+            query.status = "success"
         query.total_count = len(saved_jobs)
         query.error_message = "\n".join(platform_messages)
         query.finished_at = datetime.now()

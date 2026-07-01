@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
@@ -11,6 +13,7 @@ from app.config import DATA_DIR
 
 SESSION_ROOT = DATA_DIR / "company_intel_sessions"
 SESSION_ROOT.mkdir(exist_ok=True)
+PLAYWRIGHT_LOCKS: dict[str, asyncio.Lock] = {}
 
 
 class BrowserSessionError(RuntimeError):
@@ -96,6 +99,25 @@ def get_user_data_dir(platform: str) -> Path:
     return path
 
 
+def get_platform_lock(platform: str) -> asyncio.Lock:
+    if platform not in PLAYWRIGHT_LOCKS:
+        PLAYWRIGHT_LOCKS[platform] = asyncio.Lock()
+    return PLAYWRIGHT_LOCKS[platform]
+
+
+async def launch_persistent_context(playwright, platform: str, *, headless: bool, viewport: dict):
+    """Launch a persistent browser context, preferring installed Google Chrome when available."""
+    options = {
+        "user_data_dir": str(get_user_data_dir(platform)),
+        "headless": headless,
+        "viewport": viewport,
+    }
+    try:
+        return await playwright.chromium.launch_persistent_context(channel="chrome", **options)
+    except Exception:
+        return await playwright.chromium.launch_persistent_context(**options)
+
+
 def build_search_url(platform: str, keyword: str, city: str) -> str:
     config = get_platform_config(platform)
     encoded_keyword = quote(keyword or "", safe="")
@@ -108,27 +130,20 @@ def build_search_url(platform: str, keyword: str, city: str) -> str:
 
 
 async def open_login_window(platform: str) -> None:
-    """Open a persistent browser window for manual login."""
+    """Open the platform login page in the user's default browser."""
     config = get_platform_config(platform)
+
+    def _open_url() -> None:
+        if os.name == "nt":
+            os.startfile(config.login_url)  # type: ignore[attr-defined]
+            return
+        if not webbrowser.open(config.login_url, new=2):
+            raise BrowserSessionError(f"无法打开登录页：{config.login_url}")
+
     try:
-        from playwright.async_api import async_playwright
+        await asyncio.to_thread(_open_url)
     except Exception as exc:
-        raise BrowserSessionError("Playwright 未安装，无法打开登录窗口") from exc
-
-    async def _run_window() -> None:
-        async with async_playwright() as p:
-            context = await p.chromium.launch_persistent_context(
-                user_data_dir=str(get_user_data_dir(platform)),
-                headless=False,
-                viewport={"width": 1280, "height": 900},
-            )
-            page = context.pages[0] if context.pages else await context.new_page()
-            await page.goto(config.login_url, wait_until="domcontentloaded", timeout=60000)
-            while context.pages:
-                await asyncio.sleep(1)
-            await context.close()
-
-    asyncio.create_task(_run_window())
+        raise BrowserSessionError(f"无法打开 {config.label} 登录页：{exc}") from exc
 
 
 async def check_login_status(platform: str) -> dict:
@@ -140,23 +155,31 @@ async def check_login_status(platform: str) -> dict:
         return {"status": "browser_missing", "note": "Playwright 未安装或不可用。", "detail": str(exc)}
 
     try:
-        async with async_playwright() as p:
-            context = await p.chromium.launch_persistent_context(
-                user_data_dir=str(get_user_data_dir(platform)),
-                headless=True,
-                viewport={"width": 1280, "height": 900},
-            )
-            page = context.pages[0] if context.pages else await context.new_page()
-            await page.goto(config.home_url, wait_until="domcontentloaded", timeout=45000)
-            text = await page.locator("body").inner_text(timeout=10000)
-            await context.close()
+        async with get_platform_lock(platform):
+            async with async_playwright() as p:
+                context = await launch_persistent_context(
+                    p,
+                    platform,
+                    headless=False,
+                    viewport={"width": 1280, "height": 900},
+                )
+                page = context.pages[0] if context.pages else await context.new_page()
+                await page.goto(config.home_url, wait_until="domcontentloaded", timeout=45000)
+                text = await page.locator("body").inner_text(timeout=10000)
+                current_url = page.url
+                await context.close()
     except Exception as exc:
         message = str(exc)
         if "Executable doesn't exist" in message or "browser" in message.lower():
             return {"status": "browser_missing", "note": "Playwright 浏览器未安装，请运行 python -m playwright install chromium。", "detail": message}
         return {"status": "check_failed", "note": "登录状态检测失败，可能需要手动打开平台确认。", "detail": message}
 
-    if any(flag in text for flag in config.logged_out_texts):
+    clean_text = text.strip()
+    if "_security_check" in current_url or "安全验证" in clean_text or "验证码" in clean_text:
+        return {"status": "manual_required", "note": "平台触发安全验证，请打开登录窗口手动处理后重试。", "detail": current_url}
+    if not clean_text:
+        return {"status": "manual_required", "note": "平台页面为空白，可能被安全校验拦截，请打开登录窗口确认。", "detail": current_url}
+    if any(flag in clean_text for flag in config.logged_out_texts):
         return {"status": "not_logged_in", "note": "检测到登录入口或验证码提示，请在平台账号页打开登录窗口处理。", "detail": ""}
     return {"status": "likely_logged_in", "note": "未检测到明显登录入口，浏览器会话可能已登录。", "detail": ""}
 

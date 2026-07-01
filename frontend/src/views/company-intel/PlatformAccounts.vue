@@ -3,12 +3,22 @@
     <template #header>
       <div class="card-header">
         <span>平台账号</span>
-        <el-button :loading="loading" @click="loadAccounts">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
+        <div class="header-actions">
+          <el-button :loading="openingAll" type="primary" @click="handleOpenAllLogins">一键打开全部登录</el-button>
+          <el-button :loading="loading" @click="loadAccounts">
+            <el-icon><Refresh /></el-icon>
+            刷新
+          </el-button>
+        </div>
       </div>
     </template>
+    <el-alert
+      title="登录说明"
+      type="info"
+      description="点击登录后会打开对应招聘平台窗口。请手动登录或处理验证码，完成后关闭该窗口，再返回本页检测状态或开始真实查询。"
+      :closable="false"
+      class="login-tip"
+    />
     <el-table :data="accounts" stripe v-loading="loading" style="width: 100%">
       <el-table-column prop="label" label="平台" width="140" />
       <el-table-column label="状态" width="150">
@@ -33,15 +43,17 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { checkPlatformLogin, getPlatformAccounts, openPlatformLogin } from '@/api/companyIntel.js'
+import { checkPlatformLogin, getPlatformAccounts, openAllPlatformLogins, openPlatformLogin } from '@/api/companyIntel.js'
 
 const accounts = ref([])
 const loading = ref(false)
+const openingAll = ref(false)
 const formatTime = (value) => value ? new Date(value).toLocaleString('zh-CN') : '-'
 const statusLabel = (status) => ({
   not_configured: '未配置',
   login_window_opened: '已打开登录',
   likely_logged_in: '可能已登录',
+  manual_required: '需手动处理',
   not_logged_in: '未登录',
   browser_missing: '缺浏览器',
   check_failed: '检测失败',
@@ -63,6 +75,17 @@ const handleOpenLogin = async (row) => {
   await loadAccounts()
 }
 
+const handleOpenAllLogins = async () => {
+  openingAll.value = true
+  try {
+    await openAllPlatformLogins()
+    ElMessage.success('已打开全部平台登录窗口')
+    await loadAccounts()
+  } finally {
+    openingAll.value = false
+  }
+}
+
 const handleCheck = async (row) => {
   const result = await checkPlatformLogin(row.platform)
   ElMessage.info(result.note)
@@ -78,5 +101,12 @@ onMounted(loadAccounts)
   align-items: center;
   justify-content: space-between;
   font-weight: 600;
+}
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+.login-tip {
+  margin-bottom: 16px;
 }
 </style>

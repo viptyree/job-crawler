@@ -12,6 +12,7 @@ export const getCompanyIntelCompany = (companyId) => api.get(`/company-intel/com
 export const getCompanyIntelCompanyScore = (companyId) => api.get(`/company-intel/companies/${companyId}/score`)
 export const getPlatformAccounts = () => api.get('/company-intel/platform-accounts')
 export const openPlatformLogin = (platform) => api.post(`/company-intel/platform-accounts/${platform}/open-login`)
+export const openAllPlatformLogins = () => api.post('/company-intel/platform-accounts/open-all-logins')
 export const checkPlatformLogin = (platform) => api.post(`/company-intel/platform-accounts/${platform}/check`)
 export const exportCompanyIntelQuery = (queryId) => {
   window.open(`/api/v1/company-intel/queries/${queryId}/export`, '_blank')

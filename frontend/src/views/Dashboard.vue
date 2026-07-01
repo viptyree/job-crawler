@@ -68,6 +68,10 @@
               <el-icon><TrendCharts /></el-icon>
               行业分析报告
             </el-button>
+            <el-button type="info" size="large" :loading="loginOpening" @click="handleOpenAllLogins">
+              <el-icon><User /></el-icon>
+              一键登录
+            </el-button>
           </div>
         </el-card>
       </el-col>
@@ -77,6 +81,8 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { openAllPlatformLogins } from '@/api/companyIntel.js'
 import { getDashboard } from '@/api/stats.js'
 import * as echarts from 'echarts'
 
@@ -99,6 +105,7 @@ const statCards = computed(() => [
 
 const trendChartRef = ref(null)
 const pieChartRef = ref(null)
+const loginOpening = ref(false)
 let trendChart = null
 let pieChart = null
 
@@ -195,6 +202,16 @@ const loadData = async () => {
 const handleResize = () => {
   trendChart?.resize()
   pieChart?.resize()
+}
+
+const handleOpenAllLogins = async () => {
+  loginOpening.value = true
+  try {
+    const result = await openAllPlatformLogins()
+    ElMessage.success(`已打开 ${result.items?.length || 4} 个平台登录窗口`)
+  } finally {
+    loginOpening.value = false
+  }
 }
 
 onMounted(() => {

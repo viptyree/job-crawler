@@ -28,9 +28,9 @@
         </el-form-item>
         <el-form-item label="查询模式">
           <el-radio-group v-model="form.search_mode">
-            <el-radio-button label="mock">模拟数据</el-radio-button>
-            <el-radio-button label="real_with_mock_fallback">真实优先</el-radio-button>
             <el-radio-button label="real">仅真实</el-radio-button>
+            <el-radio-button label="real_with_mock_fallback">真实优先</el-radio-button>
+            <el-radio-button label="mock">模拟数据</el-radio-button>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -38,6 +38,14 @@
       <el-alert v-if="aliases.length" title="搜索别名" type="info" :closable="false" class="alias-box">
         <el-tag v-for="alias in aliases" :key="alias" style="margin-right: 8px;">{{ alias }}</el-tag>
       </el-alert>
+      <el-alert
+        v-if="searchMessage"
+        title="查询提示"
+        type="warning"
+        :description="searchMessage"
+        :closable="false"
+        class="alias-box"
+      />
     </el-card>
 
     <el-row v-if="score" :gutter="16" class="result-row">
@@ -93,14 +101,15 @@ const platforms = ref([])
 const aliases = ref([])
 const jobs = ref([])
 const score = ref(null)
+const searchMessage = ref('')
 const loading = ref(false)
 const lastQueryId = ref(null)
 const form = ref({
   company_name: '',
   platforms: ['boss', 'zhilian', 'job51', 'lagou'],
   city: '',
-    keyword: '',
-    search_mode: 'mock',
+  keyword: '',
+  search_mode: 'real',
 })
 
 const loadPlatforms = async () => {
@@ -120,12 +129,20 @@ const handleSearch = async () => {
   }
   loading.value = true
   try {
+    searchMessage.value = ''
+    jobs.value = []
+    score.value = null
     await loadAliases()
     const result = await searchCompanyIntel({ ...form.value, company_name: form.value.company_name.trim() })
     lastQueryId.value = result.query_id
     jobs.value = await getCompanyIntelJobs(result.query_id)
     score.value = await getCompanyIntelQueryScore(result.query_id)
-    ElMessage.success('查询完成')
+    searchMessage.value = result.error_message || ''
+    if (result.status === 'manual_required') {
+      ElMessage.warning('平台需要手动处理后重试')
+    } else {
+      ElMessage.success('查询完成')
+    }
   } finally {
     loading.value = false
   }

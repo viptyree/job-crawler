@@ -92,7 +92,13 @@ async def search(data: CompanySearchRequest, db: AsyncSession = Depends(get_db))
         keyword=data.keyword.strip(),
         search_mode=data.search_mode,
     )
-    return {"query_id": query.id, "company_id": query.company_id, "status": query.status, "total_count": query.total_count}
+    return {
+        "query_id": query.id,
+        "company_id": query.company_id,
+        "status": query.status,
+        "total_count": query.total_count,
+        "error_message": query.error_message or "",
+    }
 
 
 @router.get("/queries")
@@ -176,10 +182,29 @@ async def platform_accounts(db: AsyncSession = Depends(get_db)):
             "platform": platform["value"],
             "label": platform["label"],
             "status": account.status if account else "not_configured",
-            "note": account.note if account else "第一阶段使用模拟数据，真实登录留到第二阶段。",
+            "note": account.note if account else "点击打开登录，在平台窗口中手动登录后再进行真实查询。",
             "updated_at": account.updated_at if account else None,
         })
     return rows
+
+
+@router.post("/platform-accounts/open-all-logins")
+async def open_all_platform_logins(db: AsyncSession = Depends(get_db)):
+    opened = []
+    for platform in list_platforms():
+        platform_value = platform["value"]
+        config = get_platform_config(platform_value)
+        await open_login_window(platform_value)
+        result = await db.execute(select(IntelPlatformAccount).where(IntelPlatformAccount.platform == platform_value))
+        account = result.scalar_one_or_none()
+        if account is None:
+            account = IntelPlatformAccount(platform=platform_value)
+            db.add(account)
+        account.status = "login_window_opened"
+        account.note = f"已打开 {config.label} 登录窗口，请完成登录或验证码处理，登录后关闭窗口。"
+        opened.append({"platform": platform_value, "label": config.label, "login_url": config.login_url})
+    await db.flush()
+    return {"status": "opened", "items": opened}
 
 
 @router.post("/platform-accounts/{platform}/open-login")
@@ -192,7 +217,7 @@ async def open_platform_login(platform: str, db: AsyncSession = Depends(get_db))
         account = IntelPlatformAccount(platform=platform)
         db.add(account)
     account.status = "login_window_opened"
-    account.note = f"已打开 {config.label} 登录窗口，请在浏览器中完成登录或验证码处理。"
+    account.note = f"已打开 {config.label} 登录窗口，请完成登录或验证码处理，登录后关闭窗口。"
     await db.flush()
     return {"platform": platform, "status": account.status, "note": account.note, "login_url": config.login_url}
 
